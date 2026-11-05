@@ -27,6 +27,10 @@ public class Prefs {
 
     public static void setLanguage(Context c, String l) { sp(c).edit().putString("lang2", l).apply(); }
 
+    public static String geminiKey(Context c) { return sp(c).getString("geminiKey", ""); }
+
+    public static void setGeminiKey(Context c, String k) { sp(c).edit().putString("geminiKey", k).apply(); }
+
     public static boolean offline(Context c) { return sp(c).getBoolean("offline", false); }
 
     public static void setOffline(Context c, boolean v) { sp(c).edit().putBoolean("offline", v).apply(); }

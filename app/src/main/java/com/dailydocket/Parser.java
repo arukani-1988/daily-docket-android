@@ -50,7 +50,7 @@ public class Parser {
     // ---------------------------------------------------------------- public
 
     public Result parse(String spoken, List<Item> openItems, Item parentMeeting) {
-        String text = digits(spoken == null ? "" : spoken).trim().replaceAll("\\s+", " ");
+        String text = correct(digits(spoken == null ? "" : spoken).trim().replaceAll("\\s+", " "));
         Result r = new Result();
         r.spoken = text;
 
@@ -90,6 +90,7 @@ public class Parser {
         if (it.title.isEmpty()) it.title = clean(rest);
         else it.title = clean(it.title);
         if (it.title.isEmpty()) it.title = clean(text);
+        it.title = clean(shortenTitle(it.title));
 
         it.date = date;
         it.time = time;
@@ -103,7 +104,7 @@ public class Parser {
 
     // ---------------------------------------------------------------- vocab
 
-    static final Pattern MEETING = p("\\b(meeting|meet|vc|video ?conference|conference|visit|inspection|hearing|baithak|baithaq|call with|मीटिंग|बैठक|निरीक्षण|दौरा|મીટિંગ|બેઠક|સભા|મુલાકાત|નિરીક્ષણ)");
+    static final Pattern MEETING = p("\\b(meeting|meet|vc|video ?conference|conference|visit|inspection|hearing|baithak|baithaq|call with|tour|dauro|daura|प्रवास|मीटिंग|बैठक|निरीक्षण|दौरा|મીટિંગ|બેઠક|સભા|મુલાકાત|નિરીક્ષણ)");
     static final Pattern DEADLINE = p("\\b(deadline|due|last date|court|affidavit|writ|petition|high court|hc|sca|assembly|vidhan ?sabha|parliament|lok ?sabha|rajya ?sabha|laq|starred|unstarred|question|rti|compliance|vip|mla|minister|cmo|submission|submit by|return|कोर्ट|अदालत|न्यायालय|हलफनामा|विधानसभा|विधान सभा|संसद|प्रश्न|आरटीआई|अंतिम तिथि|કોર્ટ|અદાલત|વિધાનસભા|પ્રશ્ન|આરટીઆઈ|છેલ્લી તારીખ)");
     static final Pattern DELEGATE = p("\\b(told|asked|instructed|directed|tell|ask|instruct|direct|ko bola|ko kaha|ko bolo|ko kaho|को बोला|को कहा|ને કહ્યું|ne kahyu)\\b");
 
@@ -150,7 +151,7 @@ public class Parser {
         }
         m = T_NOON.matcher(rest);
         if (m.find()) { time = "12:00"; cut(m); return; }
-        if (meetingWord) {
+        {
             m = T_BARE_AT.matcher(rest);
             if (m.find()) {
                 int h = Integer.parseInt(m.group(1));
@@ -285,7 +286,7 @@ public class Parser {
     static final Set<String> NOT_REF = new HashSet<>(Arrays.asList(
             "at", "on", "by", "in", "of", "to", "the", "and", "kal", "aaj", "baje", "for", "till", "from", "with",
             "about", "due", "day", "days", "din", "ko", "se", "room", "hall", "within", "after", "before", "around"));
-    static final Pattern R_LABELLED = p("\\b(file|e-?file|letter|reference|ref|case|outward|inward|patra|पत्र)\\s*(?:no\\.?|number|num|nambar|क्रमांक)\\s*[:#]?\\s*([\\w/.-]*\\d[\\w/.-]*)");
+    static final Pattern R_LABELLED = p("\\b(file|e-?file|letter|reference|ref|case|outward|inward|patra|पत्र)\\s*(?:no\\.?|number|num|nambar|क्रमांक)?\\s*[:#]?\\s*([\\w/.-]*\\d[\\w/.-]*)");
     static final Pattern R_CODE = p("\\b([a-z]{2,8})[\\s/.-]?(\\d{2,6}(?:/\\d{2,4})?)\\b");
     static final Pattern R_SLASH = p("\\b(\\d{1,6}/\\d{2,4})\\b");
 
@@ -293,7 +294,7 @@ public class Parser {
         Matcher m = R_LABELLED.matcher(rest);
         if (m.find()) {
             String label = m.group(1);
-            String ref = cap(label) + " " + m.group(2);
+            String ref = (label.toLowerCase(Locale.ROOT).startsWith("e") ? "e-File" : cap(label)) + " " + m.group(2);
             cut(m);
             return ref.replaceAll("[.]$", "");
         }
@@ -453,6 +454,68 @@ public class Parser {
         return out;
     }
 
+    // ---------------------------------------------------------------- speech clean-up
+
+    /** Acronyms that voice input often spells out letter by letter ("d d o"). */
+    static final Set<String> ACRONYMS = new HashSet<>(Arrays.asList(
+            "rti", "laq", "sca", "vc", "pwd", "gad", "nic", "cmo", "pmo", "gr", "mou", "dpr", "atr", "pil", "fir", "mla", "mp",
+            "sdm", "ddo", "bdo", "tdo", "dso", "adm", "rac", "dm", "dc", "sp", "dsp", "dysp", "ee", "de", "ae", "ceo", "dpo", "deo",
+            "dho", "cdho", "ro", "aro", "pi", "psi", "ias", "ips", "gas", "cs", "acs", "dgp", "igp", "ssp", "sho", "eo", "ao", "phc", "chc"));
+
+    static final String[][] FIXES = {
+            {"collecter|kalektar|kalaktar|kalekter|collector's|collectors", "Collector"},
+            {"mamlatdar's|mamledar|mamlatdaar|mamaltdar|mamlatdar", "Mamlatdar"},
+            {"dido|d\\.d\\.o\\.?", "DDO"},
+            {"e[ -]?file|ee file|efile", "e-File"},
+            {"circus house|circle house|circuit house", "Circuit House"},
+            {"jilla panchayat|zila panchayat|zilla panchayat|jila panchayat|jilla panchayat", "District Panchayat"},
+            {"r and b|r ?& ?b", "R&B"},
+            {"collectorate|collectrate|kalektoret", "Collectorate"},
+            {"vidhan sabha|vidhansabha", "Vidhan Sabha"},
+            {"gandhi nagar", "Gandhinagar"},
+            {"video conference|video conferencing|v\\.c\\.", "VC"},
+    };
+    static final Pattern SPELLED = p("\\b([a-z])\\.?\\s([a-z])\\.?(?:\\s([a-z])\\.?)?(?:\\s([a-z])\\.?)?(?=\\s|$|[,.?!'])");
+    static final Pattern POSSESSIVE = p("\\b([A-Z]{2,5})'s\\b");
+    static final Pattern FILLER = p("^(?:(?:so|okay|ok|hello|hi|basically|actually|you know|matlab|achha|accha|haan|please note(?: that)?|note(?: that)?|"
+            + "i want to|i would like to|i'd like to|i am supposed to|i'm supposed to|i've got to|i have got to|i have to|i need to|i must|"
+            + "we have to|we need to|we have a|there is a|there's a|there is|mujhe|humein|hamein|hume|mere ko|apne ko)\\b[\\s,]*)+");
+    static final Pattern VISIT_TO = p("\\b(visit|visiting|tour|inspection)\\s+to\\s+");
+
+    static String correct(String t) {
+        Matcher m = SPELLED.matcher(t);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            StringBuilder w = new StringBuilder();
+            for (int g = 1; g <= 4; g++) if (m.group(g) != null) w.append(m.group(g));
+            String word = w.toString().toLowerCase(Locale.ROOT);
+            m.appendReplacement(sb, Matcher.quoteReplacement(ACRONYMS.contains(word) ? word.toUpperCase(Locale.ROOT) : m.group()));
+        }
+        m.appendTail(sb);
+        t = sb.toString();
+        for (String[] f : FIXES) t = p("\\b(?:" + f[0] + ")(?=\\s|$|[,.?!])").matcher(t).replaceAll(Matcher.quoteReplacement(f[1]));
+        for (String a : ACRONYMS) t = p("\\b" + a + "\\b").matcher(t).replaceAll(a.toUpperCase(Locale.ROOT));
+        t = POSSESSIVE.matcher(t).replaceAll("$1");
+        t = FILLER.matcher(t).replaceFirst("");
+        t = VISIT_TO.matcher(t).replaceAll("$1 ");
+        return t.trim();
+    }
+
+    static final Pattern CUT = p("\\s+(?:because|since|as per|so that|which|where|kyunki|kyonki|jisme|taaki|kem ke|karan ke)\\s+");
+
+    /** Keep titles short: drop the explanation after "because", "so that", etc. */
+    static String shortenTitle(String t) {
+        if (t.length() <= 60) return t;
+        Matcher m = CUT.matcher(t);
+        if (m.find() && m.start() >= 12) t = t.substring(0, m.start());
+        if (t.length() > 70) {
+            int comma = t.indexOf(", ", 15);
+            if (comma > 0) t = t.substring(0, comma);
+        }
+        if (t.length() > 90) t = t.substring(0, 87).trim() + "…";
+        return t;
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /** "११ बजे" / "૧૧ વાગ્યે" -> "11 बजे" */
@@ -470,8 +533,8 @@ public class Parser {
         rest = rest.substring(0, m.start()) + " " + rest.substring(m.end());
     }
 
-    static final Pattern LEAD = p("^(?:(?:ok|okay|please|hey|add|create|schedule|set|set up|note|note down|make|new|a|an|remind me to|remind me|i have to|i need to|need to|have to|there is|there's|ek|mujhe|yaad dilana|yaad dila do)\\b[\\s,]*)+");
-    static final Pattern TRAIL = p("(?:\\s+(?:on|by|at|before|till|until|for|due|the|and|in|of|with|about|regarding|ko|tak|hai|he|please|karna|karna hai|kar do|ke liye))+\\s*$");
+    static final Pattern LEAD = p("^(?:(?:the|ok|okay|please|hey|add|create|schedule|set|set up|note|note down|make|new|a|an|remind me to|remind me|i have to|i need to|need to|have to|there is|there's|ek|mujhe|yaad dilana|yaad dila do)\\b[\\s,]*)+");
+    static final Pattern TRAIL = p("(?:\\s+(?:on|by|at|before|till|until|for|due|the|and|in|of|with|about|regarding|ko|tak|hai|he|please|karna|karna hai|kar do|ke liye|is|are|was|che|chhe|hoga|hogi))+\\s*$");
 
     static String clean(String s) {
         String t = s.replaceAll("\\s+", " ").trim();

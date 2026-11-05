@@ -271,27 +271,27 @@ public class VoiceActivity extends Activity {
         String said = text();
         stopRecognizer();
         if (said.isEmpty()) { closeOrFinishActionPoints(); return; }
-        String title;
-        try {
-            title = handle(this, said, parentId, false);
-            savedAny = true;
-        } catch (Throwable e) {
-            App.save(this, e);
-            status.setText("Couldn't save that");
-            hint.setText("Open Daily Docket to see the error, or add it with Type instead.");
-            h.postDelayed(this::finish, 2500);
-            return;
-        }
-        status.setText("Saved ✓");
-        words.setText(title);
-        hint.setText("You can undo or edit it from the notification.");
         level.setScaleX(0.08f);
-        if (parentId != null) {
-            h.postDelayed(this::begin, 1300);      // next action point
-            doneBtn.setText("Finish");
-        } else {
-            h.postDelayed(this::finish, 1600);
-        }
+        if (!Prefs.geminiKey(this).isEmpty()) { status.setText("Understanding…"); hint.setText(""); }
+        Smart.run(this, said, parentId, false, (title, smart) -> {
+            if (isDestroyed()) return;
+            if (title == null) {
+                status.setText("Couldn't save that");
+                hint.setText("Open Daily Docket to see the error, or add it with Type instead.");
+                h.postDelayed(this::finish, 2500);
+                return;
+            }
+            savedAny = true;
+            status.setText("Saved ✓");
+            words.setText(title);
+            hint.setText((smart ? "Understood with Gemini. " : "") + "You can undo or edit it from the notification.");
+            if (parentId != null) {
+                h.postDelayed(this::begin, 1500);      // next action point
+                doneBtn.setText("Finish");
+            } else {
+                h.postDelayed(this::finish, 2200);
+            }
+        });
     }
 
     private void closeOrFinishActionPoints() {
@@ -319,8 +319,8 @@ public class VoiceActivity extends Activity {
         if (req != REQ_FALLBACK) return;
         ArrayList<String> results = data == null ? null : data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
         if (res == RESULT_OK && results != null && !results.isEmpty() && !results.get(0).trim().isEmpty()) {
-            try { handle(this, results.get(0), parentId, true); }
-            catch (Throwable e) { App.save(this, e); Toast.makeText(this, "Couldn't save that. Open Daily Docket to see the error.", Toast.LENGTH_LONG).show(); }
+            Smart.run(this, results.get(0), parentId, true, (t, smart) -> finish());
+            return;
         }
         finish();
     }
@@ -333,6 +333,11 @@ public class VoiceActivity extends Activity {
     public static String handle(Context c, String spoken, String parentId, boolean toast) {
         Item parent = parentId == null ? null : Store.get(c, parentId);
         Parser.Result r = new Parser(LocalDate.now()).parse(spoken, Store.open(c), parent);
+        return apply(c, r, spoken, toast);
+    }
+
+    /** Save an understood command (from the on-phone rules or from Gemini). */
+    public static String apply(Context c, Parser.Result r, String spoken, boolean toast) {
         String title, text;
         switch (r.kind) {
             case "complete": {

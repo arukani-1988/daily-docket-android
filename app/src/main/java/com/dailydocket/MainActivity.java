@@ -215,6 +215,36 @@ public class MainActivity extends Activity {
             Toast.makeText(this, Prefs.offline(this) ? "Voice will stay on the phone. Needs the offline speech pack for your language." : "Voice uses Google's recognition (most accurate).", Toast.LENGTH_LONG).show();
         }));
         content.addView(foot, lp(0, dp(8), 0, 0));
+        content.addView(link(Prefs.geminiKey(this).isEmpty() ? "Smart understanding: off (add a Gemini key)" : "Smart understanding: on (Gemini)", v -> geminiDialog()), lp(0, 0, 0, 0));
+    }
+
+    void geminiDialog() {
+        LinearLayout f = new LinearLayout(this);
+        f.setOrientation(LinearLayout.VERTICAL);
+        f.setPadding(dp(22), dp(6), dp(22), 0);
+        f.addView(text("With a Gemini API key, each spoken command is sent to Google Gemini to fix misheard words and pick out the main task. "
+                + "Only the sentence you spoke and today's date are sent, never your other entries. Without internet, the app uses its on-phone rules.", 13.5f, INK, false));
+        TextView warn = text("On Google's free tier, Google may use what you send to improve its products, and people may review it. "
+                + "Avoid speaking confidential details; use file numbers instead.", 13, WARN, false);
+        f.addView(warn, lp(0, dp(10), 0, 0));
+        f.addView(text("Get a free key at aistudio.google.com → Get API key.", 13, MUTED, false), lp(0, dp(10), 0, 0));
+        EditText key = new EditText(this);
+        key.setHint("Paste Gemini API key");
+        key.setSingleLine(true);
+        key.setText(Prefs.geminiKey(this));
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        f.addView(key, lp(0, dp(8), 0, 0));
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle("Smart understanding")
+                .setView(f)
+                .setPositiveButton("Save", (d, w) -> {
+                    Prefs.setGeminiKey(this, key.getText().toString().trim());
+                    Toast.makeText(this, Prefs.geminiKey(this).isEmpty() ? "Smart understanding off" : "Smart understanding on", Toast.LENGTH_SHORT).show();
+                    render();
+                })
+                .setNegativeButton("Cancel", null);
+        if (!Prefs.geminiKey(this).isEmpty()) b.setNeutralButton("Remove key", (d, w) -> { Prefs.setGeminiKey(this, ""); render(); });
+        b.show();
     }
 
     // ------------------------------------------------------------------ views: Today / Upcoming / All
@@ -544,9 +574,7 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Save", (d, w) -> {
                     String s = e.getText().toString().trim();
                     if (!s.isEmpty()) {
-                        try { VoiceActivity.handle(this, s, null); }
-                        catch (Throwable ex) { App.save(this, ex); }
-                        render();
+                        Smart.run(this, s, null, true, (t, smart) -> render());
                     }
                 })
                 .setNegativeButton("Cancel", null)
