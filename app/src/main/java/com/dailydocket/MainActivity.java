@@ -135,6 +135,10 @@ public class MainActivity extends Activity {
         tools.addView(link("Voice: " + Prefs.languageName(this), v -> { Prefs.nextLanguage(this); render(); }));
         content.addView(tools, lp(0, dp(6), 0, 0));
 
+        content.addView(tabs(), lp(0, dp(10), 0, 0));
+        if (mode.equals("upcoming")) { renderUpcoming(open, today); footer(); return; }
+        if (mode.equals("all")) { renderAll(); footer(); return; }
+
         // meetings that ended: ask for action points
         LocalDateTime now = LocalDateTime.now();
         for (Item m : open) {
@@ -183,8 +187,10 @@ public class MainActivity extends Activity {
         section("Coming up (2 weeks)", soon, null);
         section("Not yet dated", nodate, null);
         section("Done today", doneToday, null);
+        footer();
+    }
 
-        // footer
+    void footer() {
         View rule = new View(this);
         rule.setBackgroundColor(LINE);
         content.addView(rule, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)) {{ topMargin = dp(30); bottomMargin = dp(12); }});
@@ -211,6 +217,119 @@ public class MainActivity extends Activity {
         content.addView(foot, lp(0, dp(8), 0, 0));
     }
 
+    // ------------------------------------------------------------------ views: Today / Upcoming / All
+
+    String mode = "today";
+    EditText search;
+    LinearLayout results;
+    boolean showDone = false;
+
+    View tabs() {
+        LinearLayout seg = new LinearLayout(this);
+        seg.setBackground(round(SURFACE, 12, LINE));
+        seg.setPadding(dp(3), dp(3), dp(3), dp(3));
+        String[][] t = {{"today", "Today"}, {"upcoming", "Upcoming"}, {"all", "Search all"}};
+        for (String[] x : t) {
+            TextView b = text(x[1], 14.5f, mode.equals(x[0]) ? ACCENT_INK : INK, true);
+            b.setGravity(Gravity.CENTER);
+            b.setPadding(0, dp(10), 0, dp(10));
+            if (mode.equals(x[0])) b.setBackground(round(ACCENT, 10, 0));
+            b.setOnClickListener(v -> { mode = x[0]; render(); scroll.scrollTo(0, 0); });
+            seg.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        }
+        return seg;
+    }
+
+    /** Every future entry, however far ahead, grouped by date. */
+    void renderUpcoming(List<Item> open, LocalDate today) {
+        Map<String, List<Item>> byDate = new java.util.TreeMap<>();
+        List<Item> nodate = new ArrayList<>();
+        int n = 0;
+        for (Item i : open) {
+            if (!i.hasDate()) { nodate.add(i); continue; }
+            if (days(i.date, today) < 0) continue;
+            byDate.computeIfAbsent(i.date, k -> new ArrayList<>()).add(i);
+            n++;
+        }
+        content.addView(heading("Everything ahead", n));
+        if (byDate.isEmpty()) {
+            TextView e = text("Nothing scheduled yet. Anything you add for a future date appears here.", 14, MUTED, false);
+            e.setPadding(dp(14), dp(12), dp(14), dp(12));
+            e.setBackground(round(SURFACE, 12, LINE));
+            content.addView(e);
+        }
+        String lastMonth = "";
+        for (Map.Entry<String, List<Item>> e : byDate.entrySet()) {
+            LocalDate d = LocalDate.parse(e.getKey());
+            String month = d.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + d.getYear();
+            if (!month.equals(lastMonth)) {
+                TextView m = text(month.toUpperCase(Locale.ROOT), 12, ACCENT, true);
+                m.setLetterSpacing(0.08f);
+                content.addView(m, lp(0, dp(20), 0, 0));
+                lastMonth = month;
+            }
+            long k = days(e.getKey(), today);
+            String rel = k == 0 ? "Today" : k == 1 ? "Tomorrow" : "in " + k + " days";
+            TextView dh = text(Parser.shortDate(e.getKey()) + "  ·  " + rel, 15, INK, true);
+            dh.setTypeface(Typeface.create(Typeface.SERIF, Typeface.BOLD));
+            content.addView(dh, lp(0, dp(10), 0, dp(6)));
+            List<Item> l = e.getValue();
+            l.sort((a, b) -> (a.hasTime() ? a.time : "99").compareTo(b.hasTime() ? b.time : "99"));
+            content.addView(list(l));
+        }
+        section("Not yet dated", nodate, null);
+    }
+
+    /** Search titles, officers, venues, file numbers and notes, including past and completed entries. */
+    void renderAll() {
+        if (search == null) {
+            search = new EditText(this);
+            search.setHint("Search: name, file number, place, word…");
+            search.setSingleLine(true);
+            search.setTextColor(INK);
+            search.setHintTextColor(MUTED);
+            search.setPadding(dp(14), dp(12), dp(14), dp(12));
+            search.setBackground(round(SURFACE, 12, LINE));
+            search.addTextChangedListener(new android.text.TextWatcher() {
+                public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+                public void onTextChanged(CharSequence s, int a, int b, int c) { }
+                public void afterTextChanged(android.text.Editable s) { if (results != null) fillResults(); }
+            });
+        }
+        if (search.getParent() != null) ((ViewGroup) search.getParent()).removeView(search);
+        content.addView(search, lp(0, dp(14), 0, 0));
+        CheckBox done = new CheckBox(this);
+        done.setText("Include completed entries");
+        done.setTextColor(MUTED);
+        done.setChecked(showDone);
+        done.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+        done.setOnClickListener(v -> { showDone = done.isChecked(); fillResults(); });
+        content.addView(done, lp(0, dp(4), 0, 0));
+        results = new LinearLayout(this);
+        results.setOrientation(LinearLayout.VERTICAL);
+        content.addView(results);
+        fillResults();
+    }
+
+    void fillResults() {
+        results.removeAllViews();
+        String q = search.getText().toString().trim().toLowerCase(Locale.ROOT);
+        List<Item> items = new ArrayList<>();
+        for (Item i : Store.all(this)) {
+            if (i.done && !showDone) continue;
+            String hay = (i.title + " " + i.person + " " + i.venue + " " + i.attendees + " " + i.ref + " " + i.notes + " "
+                    + Item.typeLabel(i.type) + " " + (i.hasDate() ? Parser.shortDate(i.date) : "")).toLowerCase(Locale.ROOT);
+            boolean ok = true;
+            for (String w : q.split("\\s+")) if (!w.isEmpty() && !hay.contains(w)) { ok = false; break; }
+            if (ok) items.add(i);
+        }
+        items.sort((a, b) -> (a.hasDate() ? a.date : "9999").compareTo(b.hasDate() ? b.date : "9999"));
+        TextView h = text(items.size() + (items.size() == 1 ? " entry" : " entries") + (q.isEmpty() ? "" : " match \u201c" + q + "\u201d"), 13, MUTED, false);
+        LinearLayout.LayoutParams hp = lp(0, dp(10), 0, dp(8));
+        results.addView(h, hp);
+        if (!items.isEmpty()) results.addView(list(items, true));
+    }
+
     int countFu(Map<String, List<Item>> m) { int n = 0; for (List<Item> l : m.values()) n += l.size(); return n; }
 
     void section(String title, List<Item> items, String empty) {
@@ -235,19 +354,23 @@ public class MainActivity extends Activity {
         return row;
     }
 
-    View list(List<Item> items) {
+    View list(List<Item> items) { return list(items, false); }
+
+    View list(List<Item> items, boolean withDates) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackground(round(SURFACE, 12, LINE));
         box.setClipToOutline(true);
         for (int k = 0; k < items.size(); k++) {
             if (k > 0) { View d = new View(this); d.setBackgroundColor(LINE); box.addView(d, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)); }
-            box.addView(row(items.get(k)));
+            box.addView(row(items.get(k), withDates));
         }
         return box;
     }
 
-    View row(Item it) {
+    View row(Item it) { return row(it, false); }
+
+    View row(Item it, boolean withDates) {
         LocalDate today = LocalDate.now();
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
@@ -305,6 +428,7 @@ public class MainActivity extends Activity {
         StringBuilder m = new StringBuilder();
         if (!it.person.isEmpty() && !it.type.equals(Item.MEETING)) m.append("  ").append(it.person);
         if (meeting && !it.venue.isEmpty()) m.append("  ").append(it.venue);
+        if (withDates && it.hasDate() && (it.done || meeting)) m.append("  ").append(Parser.shortDate(it.date));
         if (it.hasDate() && !it.done) {
             long n = days(it.date, today);
             String rel = n < 0 ? (-n) + (n == -1 ? " day overdue" : " days overdue") : n == 0 ? (meeting ? "" : "Today") : n == 1 ? "Tomorrow" : Parser.shortDate(it.date);

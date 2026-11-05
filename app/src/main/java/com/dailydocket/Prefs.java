@@ -25,6 +25,8 @@ public class Prefs {
         sp(c).edit().putString("lang2", LANGS[(k + 1) % LANGS.length]).apply();
     }
 
+    public static void setLanguage(Context c, String l) { sp(c).edit().putString("lang2", l).apply(); }
+
     public static boolean offline(Context c) { return sp(c).getBoolean("offline", false); }
 
     public static void setOffline(Context c, boolean v) { sp(c).edit().putBoolean("offline", v).apply(); }
