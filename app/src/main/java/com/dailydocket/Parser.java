@@ -26,6 +26,7 @@ public class Parser {
         public Item target;              // for complete / reschedule
         public String date = "", time = "";
         public String spoken = "";
+        public boolean hadDate = false, hadTime = false;   // said explicitly (not a default)
     }
 
     // Android's regex engine (ICU) is already Unicode-aware and rejects UNICODE_CHARACTER_CLASS;
@@ -94,6 +95,8 @@ public class Parser {
 
         it.date = date;
         it.time = time;
+        r.hadDate = !date.isEmpty();
+        r.hadTime = !time.isEmpty();
         if (!it.hasDate() && it.hasTime()) it.date = today.toString();
         if (!it.hasDate() && (it.type.equals(Item.MEETING) || it.type.equals(Item.DEADLINE))) it.date = today.toString();
         if (!it.hasDate() && it.type.equals(Item.FOLLOWUP)) it.date = today.plusDays(3).toString();
@@ -290,7 +293,11 @@ public class Parser {
     static final Pattern R_CODE = p("\\b([a-z]{2,8})[\\s/.-]?(\\d{2,6}(?:/\\d{2,4})?)\\b");
     static final Pattern R_SLASH = p("\\b(\\d{1,6}/\\d{2,4})\\b");
 
+    static final Pattern R_OFFICIAL = p("\\b([A-Z][A-Z0-9-]{1,9}(?:/[A-Z0-9-]{1,12}){1,6}/\\d{2,6})\\b");
+
     private String extractRef() {
+        Matcher m0 = Pattern.compile("\\b([A-Z][A-Z0-9-]{1,9}(?:/[A-Za-z0-9-]{1,12}){1,6}/\\d{2,6})\\b").matcher(rest);
+        if (m0.find()) { String ref = m0.group(1); cut(m0); return ref; }
         Matcher m = R_LABELLED.matcher(rest);
         if (m.find()) {
             String label = m.group(1);
@@ -361,7 +368,7 @@ public class Parser {
 
     // ---------------------------------------------------------------- meeting extras
 
-    static final Pattern VENUE = p("\\b(?:at|in|venue)\\s+(?:the\\s+)?([^,]{3,60}?)(?=\\s+(?:about|regarding|on|for|re|with|to discuss|regarding)\\b|[,.]|\\s*$)");
+    static final Pattern VENUE = p("\\b(?:at|in|venue)\\s+(?:the\\s+)?([^,]{3,60}?)(?=\\s+(?:about|regarding|on|for|re|with|to discuss|under|chaired|presided|at|from|between)\\b|[,.]|\\s*$)");
     static final Set<String> NOT_VENUE_START = new HashSet<>(Arrays.asList("the", "a", "an", "my", "this", "that", "time", "advance"));
 
     private String extractVenue() {

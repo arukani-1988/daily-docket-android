@@ -37,8 +37,20 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    packaging {
+        resources { excludes += ['META-INF/*.kotlin_module', 'META-INF/AL2.0', 'META-INF/LGPL2.1'] }
+    }
+
     lint {
         abortOnError false
         checkReleaseBuilds false
     }
+}
+
+dependencies {
+    // Google document scanner (camera with edge detection, or pick from gallery)
+    implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1'
+    // On-phone text reading for English and Hindi, used when Gemini isn't available
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'
 }

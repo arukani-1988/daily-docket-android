@@ -84,35 +84,46 @@ public class Smart {
                 + "Times like '5 baje' with no am/pm in office context mean 5 pm for 1-7 and am for 8-11.\n\n"
                 + "Instruction:\n<<<\n" + spoken + "\n>>>";
 
-        JSONObject body = new JSONObject();
-        JSONArray contents = new JSONArray();
-        JSONObject msg = new JSONObject();
-        msg.put("role", "user");
-        msg.put("parts", new JSONArray().put(new JSONObject().put("text", prompt)));
-        contents.put(msg);
-        body.put("contents", contents);
-        body.put("generationConfig", new JSONObject().put("temperature", 0.1).put("responseMimeType", "application/json"));
-
-        String reply = null;
-        Exception last = null;
-        for (String model : MODELS) {
-            try {
-                reply = post("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", key, body.toString());
-                break;
-            } catch (HttpError e) {
-                last = e;
-                if (e.code != 404 && e.code != 400 || e.getMessage().equals("key not accepted")) throw e;   // try the next model only if this one isn't available
-            }
-        }
-        if (reply == null) throw last != null ? last : new Exception("no reply");
-
-        JSONObject res = new JSONObject(reply);
-        JSONArray parts = res.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts");
-        StringBuilder txt = new StringBuilder();
-        for (int i = 0; i < parts.length(); i++) txt.append(parts.getJSONObject(i).optString("text"));
-        String j = txt.toString().trim().replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
+        String j = generate(key, new JSONArray().put(new JSONObject().put("text", prompt)));
         JSONObject o = new JSONObject(j.substring(j.indexOf('{'), j.lastIndexOf('}') + 1));
         return toResult(o, spoken, parent, open, today);
+    }
+
+    /**
+     * Ask Gemini. Tries the fast models in turn: a busy (503), rate-limited (429) or missing model
+     * moves on to the next one, with one short retry on the first. Returns the reply text without code fences.
+     */
+    static String generate(String key, JSONArray parts) throws Exception {
+        JSONObject body = new JSONObject();
+        JSONObject msg = new JSONObject();
+        msg.put("role", "user");
+        msg.put("parts", parts);
+        body.put("contents", new JSONArray().put(msg));
+        body.put("generationConfig", new JSONObject().put("temperature", 0.1).put("responseMimeType", "application/json"));
+        String b = body.toString();
+
+        Exception last = null;
+        for (int k = 0; k < MODELS.length; k++) {
+            for (int attempt = 0; attempt < (k == 0 ? 2 : 1); attempt++) {
+                try {
+                    String reply = post("https://generativelanguage.googleapis.com/v1beta/models/" + MODELS[k] + ":generateContent", key, b);
+                    JSONObject res = new JSONObject(reply);
+                    JSONArray out = res.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts");
+                    StringBuilder txt = new StringBuilder();
+                    for (int i = 0; i < out.length(); i++) txt.append(out.getJSONObject(i).optString("text"));
+                    return txt.toString().trim().replaceAll("^```(?:json)?\\s*", "").replaceAll("\\s*```$", "");
+                } catch (HttpError e) {
+                    last = e;
+                    if ("key not accepted".equals(e.getMessage())) throw e;
+                    if (e.code >= 500 && attempt == 0 && k == 0) { Thread.sleep(1500); continue; }
+                    break;   // try the next model
+                } catch (java.net.SocketTimeoutException e) {
+                    last = e;
+                    break;
+                }
+            }
+        }
+        throw last != null ? last : new Exception("no reply");
     }
 
     static Parser.Result toResult(JSONObject o, String spoken, Item parent, List<Item> open, LocalDate today) {
@@ -180,7 +191,7 @@ public class Smart {
         if (code >= 400) {
             String lower = text.toLowerCase(Locale.ROOT);
             String why = lower.contains("api key") || lower.contains("api_key") || code == 403 ? "key not accepted"
-                    : code == 429 ? "free limit reached, try later" : "error " + code;
+                    : code == 429 ? "free limit reached, try later" : code >= 500 ? "Google's servers busy, try again in a minute" : "error " + code;
             throw new HttpError(code, why);
         }
         return text;

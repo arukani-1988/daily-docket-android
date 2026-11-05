@@ -10,4 +10,15 @@
             android:targetClass="com.dailydocket.VoiceActivity"
             android:targetPackage="com.dailydocket" />
     </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="scan"
+        android:shortcutLongLabel="@string/shortcut_scan_long"
+        android:shortcutShortLabel="@string/shortcut_scan">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.dailydocket.ScanActivity"
+            android:targetPackage="com.dailydocket" />
+    </shortcut>
 </shortcuts>

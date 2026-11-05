@@ -4,4 +4,6 @@
     <string name="widget_label">Daily Docket · Speak</string>
     <string name="shortcut_speak">Speak</string>
     <string name="shortcut_speak_long">Speak a task or meeting</string>
+    <string name="shortcut_scan">Scan letter</string>
+    <string name="shortcut_scan_long">Scan a letter or notice</string>
 </resources>

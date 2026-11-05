@@ -127,6 +127,16 @@ public class MainActivity extends Activity {
         speak.setOnClickListener(v -> startActivity(VoiceActivity.intent(this, null)));
         content.addView(speak, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(68)) {{ topMargin = dp(18); }});
 
+        Button scan = new Button(this);
+        scan.setText("Scan a letter or notice");
+        scan.setAllCaps(false);
+        scan.setTextSize(16);
+        scan.setTypeface(Typeface.DEFAULT_BOLD);
+        scan.setTextColor(ACCENT);
+        scan.setBackground(round(SURFACE, 14, ACCENT));
+        scan.setOnClickListener(v -> startActivity(new Intent(this, ScanActivity.class)));
+        content.addView(scan, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)) {{ topMargin = dp(10); }});
+
         LinearLayout tools = new LinearLayout(this);
         tools.setOrientation(LinearLayout.HORIZONTAL);
         tools.setGravity(Gravity.CENTER_VERTICAL);

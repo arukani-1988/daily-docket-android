@@ -43,6 +43,11 @@
             android:taskAffinity="com.dailydocket.voice"
             android:theme="@style/Translucent" />
 
+        <activity
+            android:name=".ScanActivity"
+            android:exported="true"
+            android:label="Scan a letter" />
+
         <!-- Second home-screen icon: one tap starts listening -->
         <activity-alias
             android:name=".SpeakLauncher"
