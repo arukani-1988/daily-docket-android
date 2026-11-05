@@ -24,7 +24,8 @@ import java.util.Locale;
  * Any failure falls back to the on-phone rules.
  */
 public class Smart {
-    static final String[] MODELS = {"gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"};
+    // Fast models first: Flash-Lite answers without a long "thinking" step.
+    static final String[] MODELS = {"gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-flash-latest"};
 
     public interface Done { void saved(String title, boolean smart); }
 
@@ -41,7 +42,9 @@ public class Smart {
             Parser.Result r = null;
             String err = null;
             try { r = understand(key, spoken, parent, open); }
-            catch (Exception e) { err = e.getMessage(); }
+            catch (java.net.SocketTimeoutException e) { err = "no answer in time"; }
+            catch (java.net.UnknownHostException e) { err = "no internet"; }
+            catch (Exception e) { err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); }
             final Parser.Result fr = r;
             final String fe = err;
             a.runOnUiThread(() -> {
@@ -98,7 +101,7 @@ public class Smart {
                 break;
             } catch (HttpError e) {
                 last = e;
-                if (e.code != 404) throw e;      // only try another model if this one doesn't exist
+                if (e.code != 404 && e.code != 400 || e.getMessage().equals("key not accepted")) throw e;   // try the next model only if this one isn't available
             }
         }
         if (reply == null) throw last != null ? last : new Exception("no reply");
@@ -164,7 +167,7 @@ public class Smart {
     static String post(String url, String key, String body) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(6000);
-        c.setReadTimeout(15000);
+        c.setReadTimeout(25000);
         c.setRequestMethod("POST");
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -175,7 +178,9 @@ public class Smart {
         String text = read(in);
         c.disconnect();
         if (code >= 400) {
-            String why = code == 400 || code == 403 ? "key not accepted" : code == 429 ? "free limit reached, try later" : "error " + code;
+            String lower = text.toLowerCase(Locale.ROOT);
+            String why = lower.contains("api key") || lower.contains("api_key") || code == 403 ? "key not accepted"
+                    : code == 429 ? "free limit reached, try later" : "error " + code;
             throw new HttpError(code, why);
         }
         return text;
