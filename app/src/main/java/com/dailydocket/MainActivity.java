@@ -111,6 +111,9 @@ public class MainActivity extends Activity {
                 + (od > 0 ? " · " + od + " overdue" : ""), 14, od > 0 ? DANGER : MUTED, false);
         content.addView(tally);
 
+        String err = App.read(this);
+        if (err != null) content.addView(errorCard(err));
+
         // speak button
         Button speak = new Button(this);
         speak.setText("  Tap and speak");
@@ -377,6 +380,33 @@ public class MainActivity extends Activity {
         return card;
     }
 
+    View errorCard(String err) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.setBackground(round(DANGER_SOFT, 12, 0));
+        card.addView(text("Daily Docket hit an error last time", 15.5f, DANGER, true));
+        card.addView(text("Copy the details and send them to Claude so it can be fixed.", 13.5f, INK, false), lp(0, dp(4), 0, dp(8)));
+        TextView d = text(err.length() > 1500 ? err.substring(0, 1500) + "…" : err, 11, MUTED, false);
+        d.setTypeface(Typeface.MONOSPACE);
+        d.setTextIsSelectable(true);
+        card.addView(d);
+        LinearLayout btns = new LinearLayout(this);
+        Button copy = pill("Copy details", DANGER, 0xFFFFFFFF);
+        copy.setOnClickListener(v -> {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Daily Docket error", err));
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+        });
+        Button dismiss = pill("Dismiss", SURFACE, INK);
+        dismiss.setOnClickListener(v -> { App.clear(this); render(); });
+        btns.addView(copy);
+        btns.addView(dismiss, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT) {{ leftMargin = dp(8); }});
+        card.addView(btns, lp(0, dp(10), 0, 0));
+        card.setLayoutParams(lp(0, dp(14), 0, 0));
+        return card;
+    }
+
     void typeDialog() {
         EditText e = new EditText(this);
         e.setHint("e.g. Meeting with SP tomorrow 11 am at Circuit House");
@@ -389,7 +419,11 @@ public class MainActivity extends Activity {
                 .setView(wrap)
                 .setPositiveButton("Save", (d, w) -> {
                     String s = e.getText().toString().trim();
-                    if (!s.isEmpty()) { VoiceActivity.handle(this, s, null); render(); }
+                    if (!s.isEmpty()) {
+                        try { VoiceActivity.handle(this, s, null); }
+                        catch (Throwable ex) { App.save(this, ex); }
+                        render();
+                    }
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

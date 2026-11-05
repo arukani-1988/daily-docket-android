@@ -28,7 +28,15 @@ public class Parser {
         public String spoken = "";
     }
 
-    private static final int F = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
+    // Android's regex engine (ICU) is already Unicode-aware and rejects UNICODE_CHARACTER_CLASS;
+    // desktop Java needs the flag so Hindi / Gujarati words match the same way.
+    private static final int F = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | (isAndroid() ? 0 : Pattern.UNICODE_CHARACTER_CLASS);
+
+    static boolean isAndroid() {
+        String vm = System.getProperty("java.vm.name", "");
+        String vendor = System.getProperty("java.vendor", "");
+        return vm.contains("Dalvik") || vm.contains("Art") || vendor.contains("Android");
+    }
     private static Pattern p(String re) { return Pattern.compile(re, F); }
 
     private final LocalDate today;

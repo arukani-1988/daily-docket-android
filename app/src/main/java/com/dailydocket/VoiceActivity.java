@@ -66,8 +66,15 @@ public class VoiceActivity extends Activity {
             finish();
             return;
         }
-        handle(this, results.get(0), parentId);
-        savedAny = true;
+        try {
+            handle(this, results.get(0), parentId);
+            savedAny = true;
+        } catch (Throwable e) {
+            App.save(this, e);
+            Toast.makeText(this, "Couldn't save that. Open Daily Docket to see the error, or use Type instead.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         if (parentId != null) listen();   // keep taking action points until the user presses back
         else finish();
     }
