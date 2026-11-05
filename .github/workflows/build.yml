@@ -24,36 +24,36 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Prepare signing key
+        id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Signing key missing. Add the KEYSTORE_BASE64 and KEYSTORE_PASSWORD repository secrets."
-            exit 1
+            echo "::warning::Signing key not added yet: building a test version only, nothing is published."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - name: Build signed APK
+      - name: Build
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          TASK: ${{ steps.key.outputs.signed == 'true' && ':app:assembleRelease' || ':app:assembleDebug' }}
         run: |
           set -o pipefail
-          gradle :app:assembleRelease --no-daemon 2>&1 | tee build.log || {
-            grep -E "error:|\berror\b|FAILURE|What went wrong" -A3 build.log | head -60 | while IFS= read -r line; do echo "::error::$line"; done
+          gradle "$TASK" --no-daemon 2>&1 | tee build.log || {
+            grep -E "error:|What went wrong|Could not|AAPT|Execution failed" -A4 build.log | head -80 | while IFS= read -r line; do echo "::error::$line"; done
             exit 1
           }
 
-      - name: Rename APK
+      - name: Publish release
+        if: steps.key.outputs.signed == 'true'
         run: cp app/build/outputs/apk/release/app-release.apk DailyDocket.apk
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DailyDocket-apk
-          path: DailyDocket.apk
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
+        if: steps.key.outputs.signed == 'true'
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: Daily Docket 1.0.${{ github.run_number }}
