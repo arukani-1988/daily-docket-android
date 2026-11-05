@@ -1,0 +1,13 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_speak"
+        android:shortcutId="speak"
+        android:shortcutLongLabel="@string/shortcut_speak_long"
+        android:shortcutShortLabel="@string/shortcut_speak">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.dailydocket.VoiceActivity"
+            android:targetPackage="com.dailydocket" />
+    </shortcut>
+</shortcuts>

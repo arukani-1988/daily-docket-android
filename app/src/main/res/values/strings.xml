@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Daily Docket</string>
+    <string name="speak_label">Speak</string>
+    <string name="widget_label">Daily Docket · Speak</string>
+    <string name="shortcut_speak">Speak</string>
+    <string name="shortcut_speak_long">Speak a task or meeting</string>
+</resources>
