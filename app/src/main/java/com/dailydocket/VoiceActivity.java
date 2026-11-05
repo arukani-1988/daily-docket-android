@@ -36,10 +36,23 @@ public class VoiceActivity extends Activity {
     private void listen() {
         Item parent = parentId == null ? null : Store.get(this, parentId);
         String lang = Prefs.language(this);
+        boolean auto = Prefs.AUTO.equals(lang);
+        String primary = auto ? "en-IN" : lang;
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, primary);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, primary);
+        if (auto) {
+            ArrayList<String> langs = new ArrayList<>(java.util.Arrays.asList("en-IN", "hi-IN", "gu-IN"));
+            // Google voice input: listen for these languages together and pick whichever is spoken
+            i.putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", new String[]{"hi-IN", "gu-IN"});
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true);
+                i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES, langs);
+                i.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED);
+                i.putStringArrayListExtra(RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES, langs);
+            }
+        }
         i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         if (Prefs.offline(this)) i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
         i.putExtra(RecognizerIntent.EXTRA_PROMPT, parent != null

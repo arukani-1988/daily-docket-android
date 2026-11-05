@@ -30,12 +30,14 @@ public class Parser {
 
     // Android's regex engine (ICU) is already Unicode-aware and rejects UNICODE_CHARACTER_CLASS;
     // desktop Java needs the flag so Hindi / Gujarati words match the same way.
-    private static final int F = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | (isAndroid() ? 0 : Pattern.UNICODE_CHARACTER_CLASS);
+    private static final int F = flags();
 
-    static boolean isAndroid() {
-        String vm = System.getProperty("java.vm.name", "");
-        String vendor = System.getProperty("java.vendor", "");
-        return vm.contains("Dalvik") || vm.contains("Art") || vendor.contains("Android");
+    static int flags() {
+        int base = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+        String vm = System.getProperty("java.vm.name", "") + System.getProperty("java.vendor", "");
+        if (vm.contains("Dalvik") || vm.contains("Android")) return base;
+        try { Pattern.compile("\\bx\\b", base | Pattern.UNICODE_CHARACTER_CLASS); return base | Pattern.UNICODE_CHARACTER_CLASS; }
+        catch (Throwable t) { return base; }
     }
     private static Pattern p(String re) { return Pattern.compile(re, F); }
 
@@ -48,7 +50,7 @@ public class Parser {
     // ---------------------------------------------------------------- public
 
     public Result parse(String spoken, List<Item> openItems, Item parentMeeting) {
-        String text = spoken == null ? "" : spoken.trim().replaceAll("\\s+", " ");
+        String text = digits(spoken == null ? "" : spoken).trim().replaceAll("\\s+", " ");
         Result r = new Result();
         r.spoken = text;
 
@@ -101,12 +103,15 @@ public class Parser {
 
     // ---------------------------------------------------------------- vocab
 
-    static final Pattern MEETING = p("\\b(meeting|meet|vc|video ?conference|conference|visit|inspection|hearing|baithak|baithaq|call with|मीटिंग|बैठक|મીટિંગ|બેઠક|સભા)\\b");
-    static final Pattern DEADLINE = p("\\b(deadline|due|last date|court|affidavit|writ|petition|high court|hc|sca|assembly|vidhan ?sabha|parliament|lok ?sabha|rajya ?sabha|laq|starred|unstarred|question|rti|compliance|vip|mla|minister|cmo|submission|submit by|return)\\b");
+    static final Pattern MEETING = p("\\b(meeting|meet|vc|video ?conference|conference|visit|inspection|hearing|baithak|baithaq|call with|मीटिंग|बैठक|निरीक्षण|दौरा|મીટિંગ|બેઠક|સભા|મુલાકાત|નિરીક્ષણ)");
+    static final Pattern DEADLINE = p("\\b(deadline|due|last date|court|affidavit|writ|petition|high court|hc|sca|assembly|vidhan ?sabha|parliament|lok ?sabha|rajya ?sabha|laq|starred|unstarred|question|rti|compliance|vip|mla|minister|cmo|submission|submit by|return|कोर्ट|अदालत|न्यायालय|हलफनामा|विधानसभा|विधान सभा|संसद|प्रश्न|आरटीआई|अंतिम तिथि|કોર્ટ|અદાલત|વિધાનસભા|પ્રશ્ન|આરટીઆઈ|છેલ્લી તારીખ)");
     static final Pattern DELEGATE = p("\\b(told|asked|instructed|directed|tell|ask|instruct|direct|ko bola|ko kaha|ko bolo|ko kaho|को बोला|को कहा|ને કહ્યું|ne kahyu)\\b");
 
     static String category(String t) {
         String s = t.toLowerCase(Locale.ROOT);
+        for (String w : new String[]{"कोर्ट", "अदालत", "न्यायालय", "हलफनामा", "કોર્ટ", "અદાલત"}) if (s.contains(w)) return "court";
+        for (String w : new String[]{"विधानसभा", "विधान सभा", "संसद", "प्रश्न", "વિધાનસભા", "પ્રશ્ન"}) if (s.contains(w)) return "assembly";
+        for (String w : new String[]{"आरटीआई", "આરટીઆઈ"}) if (s.contains(w)) return "rti";
         if (s.matches("(?s).*\\b(court|affidavit|writ|petition|high court|hc|sca|hearing)\\b.*")) return "court";
         if (s.matches("(?s).*\\b(assembly|vidhan ?sabha|parliament|lok ?sabha|rajya ?sabha|laq|starred|unstarred|question)\\b.*")) return "assembly";
         if (s.matches("(?s).*\\brti\\b.*")) return "rti";
@@ -449,6 +454,17 @@ public class Parser {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** "११ बजे" / "૧૧ વાગ્યે" -> "11 बजे" */
+    static String digits(String s) {
+        StringBuilder b = new StringBuilder(s.length());
+        for (char ch : s.toCharArray()) {
+            if (ch >= '\u0966' && ch <= '\u096F') b.append((char) ('0' + ch - '\u0966'));
+            else if (ch >= '\u0AE6' && ch <= '\u0AEF') b.append((char) ('0' + ch - '\u0AE6'));
+            else b.append(ch);
+        }
+        return b.toString();
+    }
 
     private void cut(Matcher m) {
         rest = rest.substring(0, m.start()) + " " + rest.substring(m.end());
