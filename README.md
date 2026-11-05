@@ -8,3 +8,7 @@ Personal docket for meetings, tasks, follow-ups and hard deadlines.
 - Entries are stored only on the phone.
 
 Each push to `main` builds a signed APK and publishes it under **Releases**.
+
+## Install
+
+Open the latest release on your phone, download `DailyDocket.apk`, and allow installing from your browser when Android asks.
